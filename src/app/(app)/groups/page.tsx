@@ -39,7 +39,10 @@ export default function GroupsPage() {
             <Button variant="outline" onClick={() => setJoinOpen(true)}>
               <Users className="h-4 w-4" /> Join group
             </Button>
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button
+              onClick={() => setCreateOpen(true)}
+              data-testid="groups-create"
+            >
               <Plus className="h-4 w-4" /> New group
             </Button>
           </div>
@@ -53,7 +56,7 @@ export default function GroupsPage() {
           <EmptyState
             icon={<Users className="h-8 w-8 text-ink" />}
             title="No groups yet"
-            description="Create a new circle or join an existing group with an invite code to start splitting expenses transparently on Stellar."
+            description="You haven't joined any groups yet. Create a new group to get started!"
             action={
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <Button onClick={() => setCreateOpen(true)}>
@@ -68,7 +71,12 @@ export default function GroupsPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {groups.map((group) => (
-              <Link key={group.id} href={`/groups/${group.id}`}>
+              <Link
+                key={group.id}
+                href={`/groups/${group.id}`}
+                data-testid="group-card"
+                data-group-id={group.id}
+              >
                 <Card className="h-full transition-all hover:-translate-y-1 hover:shadow-brutal-lg">
                   <CardContent className="p-5 flex flex-col justify-between h-full">
                     <div>

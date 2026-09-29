@@ -31,6 +31,7 @@ import {
   validateExpenseForm,
 } from "@/lib/expenseValidation";
 import { expenseFormSchema } from "@/lib/validations/expense";
+import { expenseCreationSchema } from "@/lib/validation";
 import { MAX_DECIMAL_PLACES, parseExactAmount } from "@/lib/money";
 import { useWalletDisconnected } from "@/lib/wallet-store";
 import { convertCurrency, currencyRate, rateDeviationPercent, SUPPORTED_FIAT_CURRENCIES, type SupportedFiatCurrency } from "@/lib/currency";
@@ -79,7 +80,7 @@ export function AddExpenseDialog({
   const [assetKey, setAssetKey] = useState(() => supportedAssetKey(activeAsset));
   const [payerUserId, setPayerUserId] = useState(currentUserId);
   const [splitType, setSplitType] = useState<SplitType>("equal");
-  const [participants, setParticipants] = useState<string[]>(members.map((m) => m.userId));
+  const [participants, setParticipants] = useState<string[]>(() => members.map((m) => m.userId));
   const [custom, setCustom] = useState<Record<string, string>>({});
   const [percent, setPercent] = useState<Record<string, string>>({});
   // Bumped when a draft is restored so the calculator remounts with its values.
@@ -133,6 +134,24 @@ export function AddExpenseDialog({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [showErrors, setShowErrors] = useState(false);
+
+  // The dialog mounts as soon as the group page opens, which is usually before
+  // the group's members have loaded — so `participants` starts empty and never
+  // picks up the list. Adopt members as they arrive while nothing is selected
+  // yet, and drop anyone who has left the group; a deliberate selection is left
+  // alone. Without this, a cold visit to a group offers no participants and the
+  // expense cannot be created at all.
+  useEffect(() => {
+    const memberIdsNow = members.map((m) => m.userId);
+    setParticipants((current) => {
+      if (current.length === 0) return memberIdsNow;
+      const known = new Set(memberIdsNow);
+      const stillMembers = current.filter((id) => known.has(id));
+      if (stillMembers.length === current.length) return current;
+      return stillMembers.length > 0 ? stillMembers : memberIdsNow;
+    });
+  }, [members]);
+
   const walletDisconnected = useWalletDisconnected();
   // The offline store is the single source of truth for connectivity (the
   // network listeners in AppShell keep it current), so the form and the sync
@@ -283,7 +302,11 @@ export function AddExpenseDialog({
       return;
     }
 
-    const payload: CreateExpenseRequest = {
+    // Final runtime gate on the exact payload about to be dispatched (#315):
+    // a malformed amount, an invalid asset code, or a split that does not add
+    // up is rejected here — with a descriptive message — before mergepay-api
+    // ever sees the request.
+    const payload = expenseCreationSchema.safeParse({
       title: title.trim(),
       description: description.trim() || undefined,
       amount,
@@ -294,12 +317,16 @@ export function AddExpenseDialog({
       payerUserId,
       memo: memo.trim() || undefined,
       receiptUrl,
-    };
+    });
+    if (!payload.success) {
+      toast.error(payload.error.issues[0]?.message ?? "Please fix the errors before submitting");
+      return;
+    }
 
     // Offline: persist the draft in the queue; the sync runner posts it (with
     // its idempotency key) the moment the connection returns.
     if (isOffline) {
-      useOfflineStore.getState().enqueue(groupId, payload);
+      useOfflineStore.getState().enqueue(groupId, payload.data);
       clearDraft();
       reset();
       toast.success(
@@ -312,7 +339,7 @@ export function AddExpenseDialog({
     try {
       setSubmitting(true);
       await create.mutateAsync({
-        ...payload,
+        ...payload.data,
         // Makes the bounded retries in `useCreateExpense` (and a manual retry
         // after a timeout) safe: the server deduplicates them into one row.
         idempotencyKey: createIdempotencyKey(),
@@ -547,7 +574,7 @@ export function AddExpenseDialog({
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" loading={pending} disabled={submitBlocked}>
+          <Button type="submit" loading={pending} disabled={submitBlocked} data-testid="add-expense-confirm">
             {isOffline ? "Save offline" : "Add Expense"}
           </Button>
         </div>

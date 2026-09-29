@@ -116,25 +116,58 @@ describe("Dialog Accessibility & Focus Trapping", () => {
     });
   });
 
-  it("wraps Tab and Shift+Tab between the first and last controls", async () => {
+  it("prioritizes primary action element for initial focus when no autofocus", async () => {
     render(
-      <Dialog open={true} onClose={() => {}} title="Keyboard Navigation">
-        <button>First action</button>
-        <button>Last action</button>
+      <Dialog open={true} onClose={() => {}} title="Primary Action Test">
+        <button data-testid="cancel-btn">Cancel</button>
+        <button data-testid="primary-btn" data-primary-action>Confirm Settlement</button>
       </Dialog>
     );
 
-    const controls = screen.getByRole("dialog").querySelectorAll("button");
-    const first = controls[0] as HTMLButtonElement;
-    const last = controls[controls.length - 1] as HTMLButtonElement;
+    const primaryBtn = screen.getByTestId("primary-btn");
+    await waitFor(() => {
+      expect(document.activeElement).toBe(primaryBtn);
+    });
+  });
 
-    first.focus();
-    fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(last);
+  it("traps focus and wraps from last to first element on Tab", async () => {
+    render(
+      <Dialog open={true} onClose={() => {}} title="Tab Wrap Test">
+        <button data-testid="first-btn">First</button>
+        <button data-testid="last-btn">Last</button>
+      </Dialog>
+    );
 
-    last.focus();
-    fireEvent.keyDown(last, { key: "Tab" });
-    expect(document.activeElement).toBe(first);
+    const closeBtn = screen.getByLabelText("Close Tab Wrap Test");
+    const lastBtn = screen.getByTestId("last-btn");
+
+    // Focus last button inside dialog
+    lastBtn.focus();
+    expect(document.activeElement).toBe(lastBtn);
+
+    // Press Tab on the last button -> wraps to close button (first overall focusable in dialog)
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(closeBtn);
+  });
+
+  it("traps focus and wraps from first to last element on Shift+Tab", async () => {
+    render(
+      <Dialog open={true} onClose={() => {}} title="Shift Tab Wrap Test">
+        <button data-testid="first-btn">First</button>
+        <button data-testid="last-btn">Last</button>
+      </Dialog>
+    );
+
+    const closeBtn = screen.getByLabelText("Close Shift Tab Wrap Test");
+    const lastBtn = screen.getByTestId("last-btn");
+
+    // Focus first overall element (close button in header)
+    closeBtn.focus();
+    expect(document.activeElement).toBe(closeBtn);
+
+    // Press Shift+Tab on first element -> wraps to last button
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(lastBtn);
   });
 });
 
