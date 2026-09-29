@@ -115,6 +115,27 @@ describe("Dialog Accessibility & Focus Trapping", () => {
       expect(document.activeElement).toBe(autofocused);
     });
   });
+
+  it("wraps Tab and Shift+Tab between the first and last controls", async () => {
+    render(
+      <Dialog open={true} onClose={() => {}} title="Keyboard Navigation">
+        <button>First action</button>
+        <button>Last action</button>
+      </Dialog>
+    );
+
+    const controls = screen.getByRole("dialog").querySelectorAll("button");
+    const first = controls[0] as HTMLButtonElement;
+    const last = controls[controls.length - 1] as HTMLButtonElement;
+
+    first.focus();
+    fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+
+    last.focus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+  });
 });
 
 describe("MobileDrawer Accessibility & Focus Trapping", () => {
